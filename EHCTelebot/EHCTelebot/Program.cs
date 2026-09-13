@@ -100,16 +100,14 @@ app.MapPost(
     "/api/telegram-webhook",
     async (
         HttpRequest request,
-        TelegramUpdate update,
+        Telegram.Bot.Types.Update update,
         TelegramUpdateHandler handler,
         IConfiguration configuration) =>
     {
         var expectedSecret =
-            configuration[
-                "Telegram:WebhookSecret"];
+            configuration["Telegram:WebhookSecret"];
 
-        if (string.IsNullOrWhiteSpace(
-                expectedSecret))
+        if (string.IsNullOrWhiteSpace(expectedSecret))
         {
             return Results.StatusCode(500);
         }
