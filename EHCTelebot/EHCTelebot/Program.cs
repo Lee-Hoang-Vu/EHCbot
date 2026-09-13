@@ -98,46 +98,60 @@ app.MapGet("/api/test-db", async (AppDbContext db) =>
 
 app.MapPost(
     "/api/telegram-webhook",
-    async (HttpRequest request) =>
+    async (
+        HttpRequest request,
+        TelegramUpdateHandler handler,
+        IConfiguration configuration) =>
     {
         try
         {
-            Console.WriteLine("=== TELEGRAM WEBHOOK HIT ===");
+            var expectedSecret =
+                configuration["Telegram:WebhookSecret"];
 
-            Console.WriteLine(
-                $"Method: {request.Method}");
+            if (string.IsNullOrWhiteSpace(expectedSecret))
+            {
+                Console.WriteLine("WebhookSecret is missing.");
+                return Results.StatusCode(500);
+            }
 
-            Console.WriteLine(
-                $"Content-Type: {request.ContentType}");
-
-            if (request.Headers.TryGetValue(
+            if (!request.Headers.TryGetValue(
                     "X-Telegram-Bot-Api-Secret-Token",
-                    out var secret))
+                    out var receivedSecret))
             {
-                Console.WriteLine("Secret header received.");
-            }
-            else
-            {
-                Console.WriteLine("Secret header MISSING.");
+                Console.WriteLine("Telegram secret header is missing.");
+                return Results.Unauthorized();
             }
 
-            using var reader = new StreamReader(request.Body);
-            var body = await reader.ReadToEndAsync();
-
-            Console.WriteLine(
-                $"Body length: {body.Length}");
-
-            Console.WriteLine(
-                $"Body: {body}");
-
-            return Results.Ok(new
+            if (receivedSecret != expectedSecret)
             {
-                status = "received"
-            });
+                Console.WriteLine("Telegram secret is invalid.");
+                return Results.Unauthorized();
+            }
+
+            var update =
+                await System.Text.Json.JsonSerializer
+                    .DeserializeAsync<TelegramUpdate>(
+                        request.Body);
+
+            if (update == null)
+            {
+                Console.WriteLine("Telegram update is null.");
+                return Results.BadRequest();
+            }
+
+            Console.WriteLine(
+                $"Telegram update received: {update.Id}");
+
+            await handler.HandleAsync(update);
+
+            Console.WriteLine(
+                $"Telegram update {update.Id} handled successfully.");
+
+            return Results.Ok();
         }
         catch (Exception ex)
         {
-            Console.WriteLine("WEBHOOK TEST ERROR:");
+            Console.WriteLine("WEBHOOK ERROR:");
             Console.WriteLine(ex.ToString());
 
             return Results.StatusCode(500);
