@@ -100,35 +100,60 @@ app.MapPost(
     "/api/telegram-webhook",
     async (
         HttpRequest request,
-        Telegram.Bot.Types.Update update,
         TelegramUpdateHandler handler,
         IConfiguration configuration) =>
     {
-        var expectedSecret =
-            configuration["Telegram:WebhookSecret"];
-
-        if (string.IsNullOrWhiteSpace(expectedSecret))
+        try
         {
+            var expectedSecret =
+                configuration["Telegram:WebhookSecret"];
+
+            if (string.IsNullOrWhiteSpace(expectedSecret))
+            {
+                Console.WriteLine("WebhookSecret is missing.");
+                return Results.StatusCode(500);
+            }
+
+            if (!request.Headers.TryGetValue(
+                    "X-Telegram-Bot-Api-Secret-Token",
+                    out var receivedSecret))
+            {
+                Console.WriteLine("Telegram secret header is missing.");
+                return Results.Unauthorized();
+            }
+
+            if (receivedSecret != expectedSecret)
+            {
+                Console.WriteLine("Telegram secret is invalid.");
+                return Results.Unauthorized();
+            }
+
+            var update =
+                await System.Text.Json.JsonSerializer
+                    .DeserializeAsync<TelegramUpdate>(
+                        request.Body);
+
+            if (update == null)
+            {
+                Console.WriteLine("Telegram update is null.");
+                return Results.BadRequest();
+            }
+
+            Console.WriteLine(
+                $"Telegram update received: {update.Id}");
+
+            await handler.HandleAsync(update);
+
+            return Results.Ok();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("WEBHOOK ERROR:");
+            Console.WriteLine(ex.ToString());
+
             return Results.StatusCode(500);
         }
-
-        if (!request.Headers.TryGetValue(
-                "X-Telegram-Bot-Api-Secret-Token",
-                out var receivedSecret))
-        {
-            return Results.Unauthorized();
-        }
-
-        if (receivedSecret != expectedSecret)
-        {
-            return Results.Unauthorized();
-        }
-
-        await handler.HandleAsync(update);
-
-        return Results.Ok();
     });
-
 // =====================================================
 // DAILY NOTIFICATION
 // =====================================================
