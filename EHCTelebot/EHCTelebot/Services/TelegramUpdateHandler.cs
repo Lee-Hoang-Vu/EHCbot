@@ -4,7 +4,7 @@ using EHCTelebot.Data;
 using EHCTelebot.Models;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot;
-using TelegramUpdate = Telegram.Bot.Types.Update;
+
 
 namespace EHCTelebot.Services;
 
@@ -25,8 +25,7 @@ public class TelegramUpdateHandler
         _db = db;
         _telegramService = telegramService;
     }
-
-    public async Task HandleAsync(TelegramUpdate update)
+    public async Task HandleAsync(TelegramWebhookUpdate update)
     {
         if (update.Message == null ||
             string.IsNullOrWhiteSpace(update.Message.Text))

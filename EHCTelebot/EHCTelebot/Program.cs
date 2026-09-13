@@ -1,17 +1,12 @@
 using EHCTelebot.Data;
 using EHCTelebot.Services;
 using Microsoft.EntityFrameworkCore;
-using TelegramUpdate = Telegram.Bot.Types.Update;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// =====================================================
-// DATABASE
-// =====================================================
-
 var connectionString =
-    builder.Configuration.GetConnectionString(
-        "DefaultConnection");
+    builder.Configuration.GetConnectionString("DefaultConnection");
 
 if (string.IsNullOrWhiteSpace(connectionString))
 {
@@ -22,17 +17,9 @@ if (string.IsNullOrWhiteSpace(connectionString))
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// =====================================================
-// SERVICES
-// =====================================================
-
 builder.Services.AddSingleton<TelegramService>();
 builder.Services.AddScoped<TelegramUpdateHandler>();
 builder.Services.AddScoped<DailyNotificationService>();
-
-// =====================================================
-// PORT
-// =====================================================
 
 var port =
     Environment.GetEnvironmentVariable("PORT")
@@ -41,22 +28,16 @@ var port =
 builder.WebHost.UseUrls(
     $"http://0.0.0.0:{port}");
 
-// =====================================================
-// APPLICATION
-// =====================================================
-
 var app = builder.Build();
 
-// =====================================================
-// ROOT
-// =====================================================
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
 
 app.MapGet("/", () =>
     "EHC Telegram Bot is running!");
 
-// =====================================================
-// PING
-// =====================================================
 
 app.MapGet("/api/ping", () =>
 {
@@ -67,16 +48,16 @@ app.MapGet("/api/ping", () =>
     });
 });
 
-// =====================================================
+
+// ============================================================
 // DATABASE TEST
-// =====================================================
+// ============================================================
 
 app.MapGet("/api/test-db", async (AppDbContext db) =>
 {
     try
     {
-        var count =
-            await db.Users.CountAsync();
+        var count = await db.Users.CountAsync();
 
         return Results.Ok(new
         {
@@ -92,9 +73,10 @@ app.MapGet("/api/test-db", async (AppDbContext db) =>
     }
 });
 
-// =====================================================
+
+// ============================================================
 // TELEGRAM WEBHOOK
-// =====================================================
+// ============================================================
 
 app.MapPost(
     "/api/telegram-webhook",
@@ -105,12 +87,18 @@ app.MapPost(
     {
         try
         {
+            // ------------------------------------------------
+            // 1. Check Telegram secret
+            // ------------------------------------------------
+
             var expectedSecret =
                 configuration["Telegram:WebhookSecret"];
 
             if (string.IsNullOrWhiteSpace(expectedSecret))
             {
-                Console.WriteLine("WebhookSecret is missing.");
+                Console.WriteLine(
+                    "Telegram:WebhookSecret is missing.");
+
                 return Results.StatusCode(500);
             }
 
@@ -118,48 +106,107 @@ app.MapPost(
                     "X-Telegram-Bot-Api-Secret-Token",
                     out var receivedSecret))
             {
-                Console.WriteLine("Telegram secret header is missing.");
+                Console.WriteLine(
+                    "Telegram secret header is missing.");
+
                 return Results.Unauthorized();
             }
 
             if (receivedSecret != expectedSecret)
             {
-                Console.WriteLine("Telegram secret is invalid.");
+                Console.WriteLine(
+                    "Telegram secret is invalid.");
+
                 return Results.Unauthorized();
             }
 
-            var update =
-                await System.Text.Json.JsonSerializer
-                    .DeserializeAsync<TelegramUpdate>(
-                        request.Body);
 
-            if (update == null)
+            // ------------------------------------------------
+            // 2. Read Telegram JSON
+            // ------------------------------------------------
+
+            using var reader =
+                new StreamReader(request.Body);
+
+            var body =
+                await reader.ReadToEndAsync();
+
+            if (string.IsNullOrWhiteSpace(body))
             {
-                Console.WriteLine("Telegram update is null.");
+                Console.WriteLine(
+                    "Telegram webhook body is empty.");
+
                 return Results.BadRequest();
             }
 
-            Console.WriteLine(
-                $"Telegram update received: {update.Id}");
+
+            // ------------------------------------------------
+            // 3. Deserialize to our own DTO
+            // ------------------------------------------------
+
+            var update =
+                JsonSerializer.Deserialize<TelegramWebhookUpdate>(
+                    body,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+            if (update == null)
+            {
+                Console.WriteLine(
+                    "Cannot deserialize Telegram update.");
+
+                return Results.BadRequest();
+            }
+
+
+            // ------------------------------------------------
+            // 4. Ignore updates without message
+            // ------------------------------------------------
+
+            if (update.Message == null)
+            {
+                return Results.Ok();
+            }
+
+            if (update.Message.Chat == null)
+            {
+                return Results.Ok();
+            }
+
+
+            // ------------------------------------------------
+            // 5. Process bot command/message
+            // ------------------------------------------------
 
             await handler.HandleAsync(update);
 
-            Console.WriteLine(
-                $"Telegram update {update.Id} handled successfully.");
+
+            // ------------------------------------------------
+            // 6. Telegram requires successful HTTP response
+            // ------------------------------------------------
 
             return Results.Ok();
         }
         catch (Exception ex)
         {
-            Console.WriteLine("WEBHOOK ERROR:");
-            Console.WriteLine(ex.ToString());
+            Console.WriteLine(
+                "========== TELEGRAM WEBHOOK ERROR ==========");
+
+            Console.WriteLine(ex);
+
+            Console.WriteLine(
+                "============================================");
 
             return Results.StatusCode(500);
         }
     });
-// =====================================================
+
+
+// ============================================================
 // DAILY NOTIFICATION
-// =====================================================
+// ============================================================
 
 app.MapPost(
     "/api/trigger-daily",
@@ -195,5 +242,6 @@ app.MapPost(
 
         return Results.Ok(result);
     });
+
 
 app.Run();
