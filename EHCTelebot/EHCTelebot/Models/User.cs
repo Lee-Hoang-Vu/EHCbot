@@ -8,9 +8,9 @@ public class User
 
     public DateTime? StartDate { get; set; }
 
-    public int ChatState { get; set; }
+    public int ChatState { get; set; } = 2;
 
-    public bool IsActive { get; set; }
+    public bool IsActive { get; set; } = true;
 
     public DateTime? LastNotificationDate { get; set; }
 }

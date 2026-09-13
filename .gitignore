@@ -429,6 +429,17 @@ FodyWeavers.xsd
 *.msp
 
 # Local configuration / secrets
+.vs/
+bin/
+obj/
+
 appsettings.json
 appsettings.*.json
 !appsettings.example.json
+
+Dockerfile
+!.Dockerfile
+
+*.user
+*.suo
+*.log

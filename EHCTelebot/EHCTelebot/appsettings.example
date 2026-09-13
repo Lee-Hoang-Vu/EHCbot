@@ -7,6 +7,13 @@
 	},
 	"AllowedHosts": "*",
 	"ConnectionStrings": {
-		"DefaultConnection": "Host=YOUR_HOST;Database=YOUR_DATABASE;Username=YOUR_USERNAME;Password=YOUR_PASSWORD;SSL Mode=Require"
+		"DefaultConnection": "YOUR_CONNECTION_STRING"
+	},
+	"Telegram": {
+		"BotToken": "YOUR_TELEGRAM_BOT_TOKEN",
+		"WebhookSecret": "YOUR_WEBHOOK_SECRET"
+	},
+	"Cron": {
+		"ApiKey": "YOUR_CRON_API_KEY"
 	}
 }
