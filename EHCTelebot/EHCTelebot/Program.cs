@@ -98,57 +98,46 @@ app.MapGet("/api/test-db", async (AppDbContext db) =>
 
 app.MapPost(
     "/api/telegram-webhook",
-    async (
-        HttpRequest request,
-        TelegramUpdateHandler handler,
-        IConfiguration configuration) =>
+    async (HttpRequest request) =>
     {
         try
         {
-            var expectedSecret =
-                configuration["Telegram:WebhookSecret"];
-
-            if (string.IsNullOrWhiteSpace(expectedSecret))
-            {
-                Console.WriteLine("WebhookSecret is missing.");
-                return Results.StatusCode(500);
-            }
-
-            if (!request.Headers.TryGetValue(
-                    "X-Telegram-Bot-Api-Secret-Token",
-                    out var receivedSecret))
-            {
-                Console.WriteLine("Telegram secret header is missing.");
-                return Results.Unauthorized();
-            }
-
-            if (receivedSecret != expectedSecret)
-            {
-                Console.WriteLine("Telegram secret is invalid.");
-                return Results.Unauthorized();
-            }
-
-            var update =
-                await System.Text.Json.JsonSerializer
-                    .DeserializeAsync<TelegramUpdate>(
-                        request.Body);
-
-            if (update == null)
-            {
-                Console.WriteLine("Telegram update is null.");
-                return Results.BadRequest();
-            }
+            Console.WriteLine("=== TELEGRAM WEBHOOK HIT ===");
 
             Console.WriteLine(
-                $"Telegram update received: {update.Id}");
+                $"Method: {request.Method}");
 
-            await handler.HandleAsync(update);
+            Console.WriteLine(
+                $"Content-Type: {request.ContentType}");
 
-            return Results.Ok();
+            if (request.Headers.TryGetValue(
+                    "X-Telegram-Bot-Api-Secret-Token",
+                    out var secret))
+            {
+                Console.WriteLine("Secret header received.");
+            }
+            else
+            {
+                Console.WriteLine("Secret header MISSING.");
+            }
+
+            using var reader = new StreamReader(request.Body);
+            var body = await reader.ReadToEndAsync();
+
+            Console.WriteLine(
+                $"Body length: {body.Length}");
+
+            Console.WriteLine(
+                $"Body: {body}");
+
+            return Results.Ok(new
+            {
+                status = "received"
+            });
         }
         catch (Exception ex)
         {
-            Console.WriteLine("WEBHOOK ERROR:");
+            Console.WriteLine("WEBHOOK TEST ERROR:");
             Console.WriteLine(ex.ToString());
 
             return Results.StatusCode(500);
